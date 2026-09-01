@@ -1,0 +1,6 @@
+@OOKING_MANAGEMENT_SERVICE_HostAddress = http://localhost:5084
+
+GET {{OOKING_MANAGEMENT_SERVICE_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
