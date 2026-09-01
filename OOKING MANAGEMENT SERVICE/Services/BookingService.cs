@@ -1,4 +1,4 @@
-﻿using BookingManagementService.Data;
+using BookingManagementService.Data;
 using BookingManagementService.DTOs;
 using BookingManagementService.Models;
 using Microsoft.EntityFrameworkCore;
@@ -46,10 +46,12 @@ public class BookingService : IBookingService
                 "User not found.");
         }
 
-        // Start transaction
-        await using var transaction =
-            await _context.Database.BeginTransactionAsync(
-                IsolationLevel.Serializable);
+        // Start transaction if using relational database
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction = null;
+        if (_context.Database.IsRelational())
+        {
+            transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        }
 
         // 4. Check for overlapping active bookings
         var hasOverlap = await _context.Bookings
@@ -81,8 +83,12 @@ public class BookingService : IBookingService
 
         await _context.SaveChangesAsync();
 
-        // Commit transaction
-        await transaction.CommitAsync();
+        // Commit transaction if active
+        if (transaction != null)
+        {
+            await transaction.CommitAsync();
+            await transaction.DisposeAsync();
+        }
 
         // 7. Return response
         return new BookingResponse
@@ -100,14 +106,36 @@ public class BookingService : IBookingService
     public async Task<IEnumerable<BookingResponse>> GetBookingsAsync(
         int resourceId,
         DateTime from,
-        DateTime to)
+        DateTime to,
+        int page = 1,
+        int pageSize = 10,
+        string? sortBy = "StartDateTime",
+        string? sortOrder = "asc")
     {
-        return await _context.Bookings
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize < 1 ? 10 : pageSize;
+        pageSize = pageSize > 100 ? 100 : pageSize;
+
+        var query = _context.Bookings
             .AsNoTracking()
             .Where(b =>
                 b.ResourceId == resourceId &&
                 b.StartDateTime < to &&
-                b.EndDateTime > from)
+                b.EndDateTime > from);
+
+        var isDescending = string.Equals(sortOrder, "desc", StringComparison.OrdinalIgnoreCase);
+
+        query = (sortBy?.ToLower()) switch
+        {
+            "enddatetime" => isDescending ? query.OrderByDescending(b => b.EndDateTime) : query.OrderBy(b => b.EndDateTime),
+            "createdat" => isDescending ? query.OrderByDescending(b => b.CreatedAt) : query.OrderBy(b => b.CreatedAt),
+            "id" => isDescending ? query.OrderByDescending(b => b.Id) : query.OrderBy(b => b.Id),
+            _ => isDescending ? query.OrderByDescending(b => b.StartDateTime) : query.OrderBy(b => b.StartDateTime)
+        };
+
+        return await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(b => new BookingResponse
             {
                 Id = b.Id,

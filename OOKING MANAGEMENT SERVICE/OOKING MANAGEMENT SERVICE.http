@@ -1,6 +1,46 @@
-@OOKING_MANAGEMENT_SERVICE_HostAddress = http://localhost:5084
+@HostAddress = http://localhost:5084
 
-GET {{OOKING_MANAGEMENT_SERVICE_HostAddress}}/weatherforecast/
+### 1. Create a User
+POST {{HostAddress}}/api/Users
+Content-Type: application/json
+
+{
+  "name": "Sanad Rahahleh",
+  "email": "sanad@example.com"
+}
+
+### 2. Get All Users
+GET {{HostAddress}}/api/Users
 Accept: application/json
 
-###
+### 3. Create a Resource
+POST {{HostAddress}}/api/Resources
+Content-Type: application/json
+
+{
+  "name": "Meeting Room A",
+  "type": "Room"
+}
+
+### 4. Get All Resources
+GET {{HostAddress}}/api/Resources
+Accept: application/json
+
+### 5. Create a Booking
+POST {{HostAddress}}/api/Bookings
+Content-Type: application/json
+
+{
+  "resourceId": 1,
+  "userId": 1,
+  "startDateTime": "2026-09-10T10:00:00Z",
+  "endDateTime": "2026-09-10T12:00:00Z"
+}
+
+### 6. Get Bookings (with Paging and Sorting)
+GET {{HostAddress}}/api/Bookings?resourceId=1&from=2026-09-01T00:00:00Z&to=2026-09-30T23:59:59Z&page=1&pageSize=10&sortBy=StartDateTime&sortOrder=asc
+Accept: application/json
+
+### 7. Cancel a Booking
+DELETE {{HostAddress}}/api/Bookings/1
+

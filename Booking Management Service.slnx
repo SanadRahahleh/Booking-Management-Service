@@ -1,3 +1,4 @@
 <Solution>
+  <Project Path="BookingManagementService.Tests/BookingManagementService.Tests.csproj" />
   <Project Path="OOKING MANAGEMENT SERVICE/Booking Management Service.csproj" />
 </Solution>

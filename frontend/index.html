@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booking Management Service — Admin Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>Booking Management Service</h1>
+            <p>API Demonstration & Admin Dashboard</p>
+        </header>
+
+        <!-- Message Alert Banner -->
+        <div id="alertBanner" class="alert"></div>
+
+        <!-- 1. Users Section -->
+        <section class="card">
+            <h2>1. Users Management</h2>
+            <div class="card-body">
+                <form id="createUserForm" class="form-inline">
+                    <input type="text" id="userName" placeholder="User Name" required>
+                    <input type="email" id="userEmail" placeholder="Email Address" required>
+                    <button type="submit" class="btn btn-primary">Create User</button>
+                </form>
+                
+                <div class="table-wrapper">
+                    <h3>Existing Users</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersList">
+                            <tr><td colspan="3" class="text-muted">Loading users...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. Resources Section -->
+        <section class="card">
+            <h2>2. Resources Management</h2>
+            <div class="card-body">
+                <form id="createResourceForm" class="form-inline">
+                    <input type="text" id="resourceName" placeholder="Resource Name (e.g. Meeting Room A)" required>
+                    <input type="text" id="resourceType" placeholder="Resource Type (e.g. Room, Laptop)" required>
+                    <button type="submit" class="btn btn-primary">Create Resource</button>
+                </form>
+
+                <div class="table-wrapper">
+                    <h3>Existing Resources</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resourcesList">
+                            <tr><td colspan="3" class="text-muted">Loading resources...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. Create Booking Section -->
+        <section class="card">
+            <h2>3. Create Booking</h2>
+            <div class="card-body">
+                <form id="createBookingForm">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="bookingResourceId">Resource ID</label>
+                            <input type="number" id="bookingResourceId" placeholder="1" required min="1">
+                        </div>
+                        <div class="form-group">
+                            <label for="bookingUserId">User ID</label>
+                            <input type="number" id="bookingUserId" placeholder="1" required min="1">
+                        </div>
+                        <div class="form-group">
+                            <label for="bookingStart">Start Date & Time</label>
+                            <input type="datetime-local" id="bookingStart" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="bookingEnd">End Date & Time</label>
+                            <input type="datetime-local" id="bookingEnd" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-success" style="margin-top: 15px;">Book Resource</button>
+                </form>
+            </div>
+        </section>
+
+        <!-- 4. View Bookings Section -->
+        <section class="card">
+            <h2>4. View & Filter Bookings</h2>
+            <div class="card-body">
+                <form id="filterBookingsForm" class="form-grid">
+                    <div class="form-group">
+                        <label for="filterResourceId">Resource ID</label>
+                        <input type="number" id="filterResourceId" placeholder="1" required min="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="filterFrom">From Date & Time</label>
+                        <input type="datetime-local" id="filterFrom" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="filterTo">To Date & Time</label>
+                        <input type="datetime-local" id="filterTo" required>
+                    </div>
+                    <div class="form-group" style="justify-content: flex-end;">
+                        <button type="submit" class="btn btn-primary">Search Bookings</button>
+                    </div>
+                </form>
+
+                <div class="table-wrapper" style="margin-top: 20px;">
+                    <table id="bookingsTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Resource ID</th>
+                                <th>User ID</th>
+                                <th>Start</th>
+                                <th>End</th>
+                                <th>Status</th>
+                                <th>Created At</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bookingsList">
+                            <tr><td colspan="8" class="text-muted">Enter criteria above and click Search.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

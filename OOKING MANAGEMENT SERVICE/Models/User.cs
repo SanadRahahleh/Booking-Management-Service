@@ -1,4 +1,4 @@
-﻿namespace BookingManagementService.Models;
+namespace BookingManagementService.Models;
 
 public class User
 {

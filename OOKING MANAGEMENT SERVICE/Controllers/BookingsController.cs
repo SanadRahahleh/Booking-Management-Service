@@ -1,4 +1,4 @@
-﻿using BookingManagementService.DTOs;
+using BookingManagementService.DTOs;
 using Microsoft.AspNetCore.Mvc;
 using OOKING_MANAGEMENT_SERVICE.Interface;
 
@@ -42,7 +42,14 @@ public class BookingsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<BookingResponse>>> GetBookings(int resourceId,DateTime from, DateTime to)
+    public async Task<ActionResult<IEnumerable<BookingResponse>>> GetBookings(
+        [FromQuery] int resourceId,
+        [FromQuery] DateTime from,
+        [FromQuery] DateTime to,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? sortBy = "StartDateTime",
+        [FromQuery] string? sortOrder = "asc")
     {
         if (from >= to)
         {
@@ -55,7 +62,11 @@ public class BookingsController : ControllerBase
         var bookings = await _bookingService.GetBookingsAsync(
             resourceId,
             from,
-            to);
+            to,
+            page,
+            pageSize,
+            sortBy,
+            sortOrder);
 
         return Ok(bookings);
     }
