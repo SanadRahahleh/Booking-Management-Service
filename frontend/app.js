@@ -81,14 +81,14 @@ document.getElementById('createUserForm').addEventListener('submit', async (e) =
         const data = await response.json();
 
         if (response.ok) {
-            showAlert(`✅ User "${data.name}" created successfully with ID: ${data.id}`, true);
+            showAlert(` User "${data.name}" created successfully with ID: ${data.id}`, true);
             document.getElementById('createUserForm').reset();
             loadUsers();
         } else {
-            showAlert(`❌ Failed to create user (${response.status}): ${data.message || 'Error occurred'}`, false);
+            showAlert(` Failed to create user (${response.status}): ${data.message || 'Error occurred'}`, false);
         }
     } catch (err) {
-        showAlert('❌ Network Error: Make sure ASP.NET Core API is running.', false);
+        showAlert(' Network Error: Make sure ASP.NET Core API is running.', false);
     }
 });
 
@@ -134,14 +134,14 @@ document.getElementById('createResourceForm').addEventListener('submit', async (
         const data = await response.json();
 
         if (response.ok) {
-            showAlert(`✅ Resource "${data.name}" created successfully with ID: ${data.id}`, true);
+            showAlert(` Resource "${data.name}" created successfully with ID: ${data.id}`, true);
             document.getElementById('createResourceForm').reset();
             loadResources();
         } else {
-            showAlert(`❌ Failed to create resource (${response.status}): ${data.message || 'Error occurred'}`, false);
+            showAlert(` Failed to create resource (${response.status}): ${data.message || 'Error occurred'}`, false);
         }
     } catch (err) {
-        showAlert('❌ Network Error: Make sure ASP.NET Core API is running.', false);
+        showAlert(' Network Error: Make sure ASP.NET Core API is running.', false);
     }
 });
 
@@ -167,17 +167,17 @@ document.getElementById('createBookingForm').addEventListener('submit', async (e
         const data = await response.json();
 
         if (response.ok) {
-            showAlert(`✅ Booking #${data.id} created successfully! (Status: ${data.status})`, true);
+            showAlert(` Booking #${data.id} created successfully! (Status: ${data.status})`, true);
             // If filter form has search active, refresh list
             document.getElementById('filterBookingsForm').dispatchEvent(new Event('submit'));
         } else if (response.status === 409) {
             // Handle 409 Conflict as specified in prompt
-            showAlert(`❌ Resource is already booked during this time.`, false);
+            showAlert(` Resource is already booked during this time.`, false);
         } else {
-            showAlert(`❌ Booking Error (${response.status}): ${data.message || 'Failed to create booking'}`, false);
+            showAlert(` Booking Error (${response.status}): ${data.message || 'Failed to create booking'}`, false);
         }
     } catch (err) {
-        showAlert('❌ Network Error: Make sure ASP.NET Core API is running.', false);
+        showAlert(' Network Error: Make sure ASP.NET Core API is running.', false);
     }
 });
 
@@ -254,7 +254,7 @@ async function cancelBooking(id) {
         }
     } catch (err) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        showAlert('❌ Network Error: Could not cancel booking.', false);
+        showAlert(' Network Error: Could not cancel booking.', false);
     }
 }
 
