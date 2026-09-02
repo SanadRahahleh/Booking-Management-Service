@@ -1,4 +1,5 @@
 using BookingManagementService.Data;
+using BookingManagementService.Middleware;
 using BookingManagementService.Services;
 using Microsoft.EntityFrameworkCore;
 using OOKING_MANAGEMENT_SERVICE.Interface;
@@ -28,6 +29,8 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

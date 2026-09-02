@@ -7,7 +7,7 @@ public interface IBookingService
     Task<BookingResponse> CreateBookingAsync(CreateBookingRequest request);
 
     Task<IEnumerable<BookingResponse>> GetBookingsAsync(
-        int resourceId,
+        string resourceId,
         DateTime from,
         DateTime to,
         int page = 1,

@@ -1,4 +1,5 @@
-﻿using BookingManagementService.Data;
+using BookingManagementService.Data;
+using BookingManagementService.DTOs;
 using BookingManagementService.Models;
 using Microsoft.EntityFrameworkCore;
 using OOKING_MANAGEMENT_SERVICE.Interface;
@@ -19,8 +20,15 @@ namespace BookingManagementService.Services
             return await _context.Resources.ToListAsync();
         }
 
-        public async Task<Resource> CreateAsync(Resource resource)
+        public async Task<Resource> CreateAsync(CreateResourceRequest request)
         {
+            var resource = new Resource
+            {
+                Id = string.IsNullOrWhiteSpace(request.Id) ? Guid.NewGuid().ToString() : request.Id.Trim(),
+                Name = request.Name.Trim(),
+                Type = request.Type.Trim()
+            };
+
             _context.Resources.Add(resource);
 
             await _context.SaveChangesAsync();

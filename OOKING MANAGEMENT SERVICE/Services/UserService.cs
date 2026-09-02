@@ -1,4 +1,4 @@
-﻿using BookingManagementService.Data;
+using BookingManagementService.Data;
 using BookingManagementService.DTOs;
 using BookingManagementService.Models;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +24,7 @@ namespace BookingManagementService.Services
         {
             var user = new User
             {
+                Id = Guid.NewGuid().ToString(),
                 Name = request.Name,
                 Email = request.Email
             };

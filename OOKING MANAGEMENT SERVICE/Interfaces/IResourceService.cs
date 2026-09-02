@@ -1,4 +1,5 @@
-﻿using BookingManagementService.Models;
+using BookingManagementService.DTOs;
+using BookingManagementService.Models;
 
 namespace OOKING_MANAGEMENT_SERVICE.Interface
 {
@@ -6,6 +7,6 @@ namespace OOKING_MANAGEMENT_SERVICE.Interface
     {
         Task<List<Resource>> GetAllAsync();
 
-        Task<Resource> CreateAsync(Resource resource);
+        Task<Resource> CreateAsync(CreateResourceRequest request);
     }
 }

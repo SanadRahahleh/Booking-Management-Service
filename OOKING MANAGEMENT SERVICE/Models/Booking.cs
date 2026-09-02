@@ -1,13 +1,13 @@
-﻿using System.Data;
+using System.Data;
 namespace BookingManagementService.Models;
 
 public class Booking
 {
     public int Id { get; set; }
 
-    public int ResourceId { get; set; }
+    public string ResourceId { get; set; } = string.Empty;
 
-    public int UserId { get; set; }
+    public string UserId { get; set; } = string.Empty;
 
     public DateTime StartDateTime { get; set; }
 

@@ -1,4 +1,5 @@
-﻿using BookingManagementService.Models;
+using BookingManagementService.DTOs;
+using BookingManagementService.Models;
 using Microsoft.AspNetCore.Mvc;
 using OOKING_MANAGEMENT_SERVICE.Interface;
 
@@ -24,9 +25,9 @@ namespace OOKING_MANAGEMENT_SERVICE.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create(Resource resource)
+        public async Task<IActionResult> Create(CreateResourceRequest request)
         {
-            var createdResource = await _resourceService.CreateAsync(resource);
+            var createdResource = await _resourceService.CreateAsync(request);
 
             return CreatedAtAction(
                 nameof(GetAll),

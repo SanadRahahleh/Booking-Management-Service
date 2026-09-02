@@ -1,4 +1,4 @@
-﻿using BookingManagementService.Models;
+using BookingManagementService.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookingManagementService.Data;
@@ -31,5 +31,9 @@ public class AppDbContext : DbContext
             .WithMany(r => r.Bookings)
             .HasForeignKey(b => b.ResourceId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Index for fast overlap checks and date range filtering
+        modelBuilder.Entity<Booking>()
+            .HasIndex(b => new { b.ResourceId, b.StartDateTime, b.EndDateTime });
     }
 }

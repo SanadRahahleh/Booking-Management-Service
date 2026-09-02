@@ -1,12 +1,12 @@
-﻿namespace BookingManagementService.DTOs;
+namespace BookingManagementService.DTOs;
 
 public class BookingResponse
 {
     public int Id { get; set; }
 
-    public int ResourceId { get; set; }
+    public string ResourceId { get; set; } = string.Empty;
 
-    public int UserId { get; set; }
+    public string UserId { get; set; } = string.Empty;
 
     public DateTime StartDateTime { get; set; }
 

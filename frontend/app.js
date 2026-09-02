@@ -151,8 +151,8 @@ document.getElementById('createResourceForm').addEventListener('submit', async (
 document.getElementById('createBookingForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    const resourceId = parseInt(document.getElementById('bookingResourceId').value);
-    const userId = parseInt(document.getElementById('bookingUserId').value);
+    const resourceId = document.getElementById('bookingResourceId').value.trim();
+    const userId = document.getElementById('bookingUserId').value.trim();
     const startDateTime = new Date(document.getElementById('bookingStart').value).toISOString();
     const endDateTime = new Date(document.getElementById('bookingEnd').value).toISOString();
 
@@ -186,7 +186,7 @@ document.getElementById('createBookingForm').addEventListener('submit', async (e
 // -------------------------------------------------------------
 document.getElementById('filterBookingsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const resourceId = document.getElementById('filterResourceId').value;
+    const resourceId = document.getElementById('filterResourceId').value.trim();
     const from = new Date(document.getElementById('filterFrom').value).toISOString();
     const to = new Date(document.getElementById('filterTo').value).toISOString();
 

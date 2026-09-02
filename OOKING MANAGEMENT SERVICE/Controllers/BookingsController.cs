@@ -18,32 +18,17 @@ public class BookingsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<BookingResponse>> CreateBooking(CreateBookingRequest request)
     {
-        try
-        {
-            var booking = await _bookingService.CreateBookingAsync(request);
+        var booking = await _bookingService.CreateBookingAsync(request);
 
-            return CreatedAtAction(
-                nameof(GetBookings),
-                new { id = booking.Id },
-                booking);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Conflict(new { message = ex.Message });
-        }
+        return CreatedAtAction(
+            nameof(GetBookings),
+            new { id = booking.Id },
+            booking);
     }
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<BookingResponse>>> GetBookings(
-        [FromQuery] int resourceId,
+        [FromQuery] string resourceId,
         [FromQuery] DateTime from,
         [FromQuery] DateTime to,
         [FromQuery] int page = 1,
@@ -53,10 +38,7 @@ public class BookingsController : ControllerBase
     {
         if (from >= to)
         {
-            return BadRequest(new
-            {
-                message = "From date must be before To date."
-            });
+            throw new ArgumentException("From date must be before To date.");
         }
 
         var bookings = await _bookingService.GetBookingsAsync(

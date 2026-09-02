@@ -53,58 +53,75 @@ public class BookingService : IBookingService
             transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
         }
 
-        // 4. Check for overlapping active bookings
-        var hasOverlap = await _context.Bookings
-            .AnyAsync(b =>
-                b.ResourceId == request.ResourceId &&
-                b.Status == BookingStatus.Active &&
-                request.StartDateTime < b.EndDateTime &&
-                request.EndDateTime > b.StartDateTime);
-
-        if (hasOverlap)
+        try
         {
-            throw new InvalidOperationException(
-                "The resource is already booked during this time.");
+            // 4. Check for overlapping active bookings
+            var hasOverlap = await _context.Bookings
+                .AnyAsync(b =>
+                    b.ResourceId == request.ResourceId &&
+                    b.Status == BookingStatus.Active &&
+                    request.StartDateTime < b.EndDateTime &&
+                    request.EndDateTime > b.StartDateTime);
+
+            if (hasOverlap)
+            {
+                throw new InvalidOperationException(
+                    "The resource is already booked during this time.");
+            }
+
+            // 5. Create booking
+            var booking = new Booking
+            {
+                ResourceId = request.ResourceId,
+                UserId = request.UserId,
+                StartDateTime = request.StartDateTime,
+                EndDateTime = request.EndDateTime,
+                Status = BookingStatus.Active,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            // 6. Save
+            _context.Bookings.Add(booking);
+
+            await _context.SaveChangesAsync();
+
+            // Commit transaction if active
+            if (transaction != null)
+            {
+                await transaction.CommitAsync();
+            }
+
+            // 7. Return response
+            return new BookingResponse
+            {
+                Id = booking.Id,
+                ResourceId = booking.ResourceId,
+                UserId = booking.UserId,
+                StartDateTime = booking.StartDateTime,
+                EndDateTime = booking.EndDateTime,
+                Status = booking.Status.ToString(),
+                CreatedAt = booking.CreatedAt
+            };
         }
-
-        // 5. Create booking
-        var booking = new Booking
+        catch
         {
-            ResourceId = request.ResourceId,
-            UserId = request.UserId,
-            StartDateTime = request.StartDateTime,
-            EndDateTime = request.EndDateTime,
-            Status = BookingStatus.Active,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        // 6. Save
-        _context.Bookings.Add(booking);
-
-        await _context.SaveChangesAsync();
-
-        // Commit transaction if active
-        if (transaction != null)
-        {
-            await transaction.CommitAsync();
-            await transaction.DisposeAsync();
+            if (transaction != null)
+            {
+                await transaction.RollbackAsync();
+            }
+            throw;
         }
-
-        // 7. Return response
-        return new BookingResponse
+        finally
         {
-            Id = booking.Id,
-            ResourceId = booking.ResourceId,
-            UserId = booking.UserId,
-            StartDateTime = booking.StartDateTime,
-            EndDateTime = booking.EndDateTime,
-            Status = booking.Status.ToString(),
-            CreatedAt = booking.CreatedAt
-        };
+            if (transaction != null)
+            {
+                await transaction.DisposeAsync();
+            }
+        }
     }
 
     public async Task<IEnumerable<BookingResponse>> GetBookingsAsync(
-        int resourceId,
+        string resourceId,
         DateTime from,
         DateTime to,
         int page = 1,

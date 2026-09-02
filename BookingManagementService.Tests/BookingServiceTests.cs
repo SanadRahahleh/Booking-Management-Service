@@ -18,7 +18,7 @@ public class BookingServiceTests
         return new AppDbContext(options);
     }
 
-    private async Task SeedUserAndResourceAsync(AppDbContext context, int userId = 1, int resourceId = 1)
+    private async Task SeedUserAndResourceAsync(AppDbContext context, string userId = "user-1", string resourceId = "resource-1")
     {
         context.Users.Add(new User { Id = userId, Name = "Test User", Email = "user@example.com" });
         context.Resources.Add(new Resource { Id = resourceId, Name = "Meeting Room A", Type = "Room" });
@@ -30,13 +30,13 @@ public class BookingServiceTests
     {
         // Arrange
         using var context = GetInMemoryDbContext();
-        await SeedUserAndResourceAsync(context, userId: 1, resourceId: 1);
+        await SeedUserAndResourceAsync(context, userId: "user-1", resourceId: "resource-1");
         var service = new BookingService(context);
 
         var request = new CreateBookingRequest
         {
-            ResourceId = 1,
-            UserId = 1,
+            ResourceId = "resource-1",
+            UserId = "user-1",
             StartDateTime = DateTime.UtcNow.AddHours(1),
             EndDateTime = DateTime.UtcNow.AddHours(2)
         };
@@ -47,8 +47,8 @@ public class BookingServiceTests
         // Assert
         Assert.NotNull(response);
         Assert.True(response.Id > 0);
-        Assert.Equal(1, response.ResourceId);
-        Assert.Equal(1, response.UserId);
+        Assert.Equal("resource-1", response.ResourceId);
+        Assert.Equal("user-1", response.UserId);
         Assert.Equal(BookingStatus.Active.ToString(), response.Status);
 
         var dbBooking = await context.Bookings.FindAsync(response.Id);
@@ -65,8 +65,8 @@ public class BookingServiceTests
 
         var request = new CreateBookingRequest
         {
-            ResourceId = 1,
-            UserId = 1,
+            ResourceId = "resource-1",
+            UserId = "user-1",
             StartDateTime = DateTime.UtcNow.AddHours(2),
             EndDateTime = DateTime.UtcNow.AddHours(1)
         };
@@ -81,15 +81,15 @@ public class BookingServiceTests
     {
         // Arrange
         using var context = GetInMemoryDbContext();
-        context.Users.Add(new User { Id = 1, Name = "User 1", Email = "user1@test.com" });
+        context.Users.Add(new User { Id = "user-1", Name = "User 1", Email = "user1@test.com" });
         await context.SaveChangesAsync();
 
         var service = new BookingService(context);
 
         var request = new CreateBookingRequest
         {
-            ResourceId = 999, // Non-existent resource
-            UserId = 1,
+            ResourceId = "non-existent-resource", // Non-existent resource
+            UserId = "user-1",
             StartDateTime = DateTime.UtcNow.AddHours(1),
             EndDateTime = DateTime.UtcNow.AddHours(2)
         };
@@ -104,15 +104,15 @@ public class BookingServiceTests
     {
         // Arrange
         using var context = GetInMemoryDbContext();
-        context.Resources.Add(new Resource { Id = 1, Name = "Room A", Type = "Room" });
+        context.Resources.Add(new Resource { Id = "resource-1", Name = "Room A", Type = "Room" });
         await context.SaveChangesAsync();
 
         var service = new BookingService(context);
 
         var request = new CreateBookingRequest
         {
-            ResourceId = 1,
-            UserId = 999, // Non-existent user
+            ResourceId = "resource-1",
+            UserId = "non-existent-user", // Non-existent user
             StartDateTime = DateTime.UtcNow.AddHours(1),
             EndDateTime = DateTime.UtcNow.AddHours(2)
         };
@@ -127,15 +127,15 @@ public class BookingServiceTests
     {
         // Arrange
         using var context = GetInMemoryDbContext();
-        await SeedUserAndResourceAsync(context, userId: 1, resourceId: 1);
+        await SeedUserAndResourceAsync(context, userId: "user-1", resourceId: "resource-1");
 
         var existingStart = DateTime.UtcNow.AddHours(10);
         var existingEnd = DateTime.UtcNow.AddHours(12);
 
         context.Bookings.Add(new Booking
         {
-            ResourceId = 1,
-            UserId = 1,
+            ResourceId = "resource-1",
+            UserId = "user-1",
             StartDateTime = existingStart,
             EndDateTime = existingEnd,
             Status = BookingStatus.Active,
@@ -148,8 +148,8 @@ public class BookingServiceTests
         // Overlapping request (11:00 to 13:00 overlaps with 10:00 to 12:00)
         var overlappingRequest = new CreateBookingRequest
         {
-            ResourceId = 1,
-            UserId = 1,
+            ResourceId = "resource-1",
+            UserId = "user-1",
             StartDateTime = existingStart.AddHours(1),
             EndDateTime = existingEnd.AddHours(1)
         };
@@ -164,7 +164,7 @@ public class BookingServiceTests
     {
         // Arrange
         using var context = GetInMemoryDbContext();
-        await SeedUserAndResourceAsync(context, userId: 1, resourceId: 1);
+        await SeedUserAndResourceAsync(context, userId: "user-1", resourceId: "resource-1");
 
         var existingStart = DateTime.UtcNow.AddHours(10);
         var existingEnd = DateTime.UtcNow.AddHours(12);
@@ -172,8 +172,8 @@ public class BookingServiceTests
         // Add a CANCELLED booking in the slot
         context.Bookings.Add(new Booking
         {
-            ResourceId = 1,
-            UserId = 1,
+            ResourceId = "resource-1",
+            UserId = "user-1",
             StartDateTime = existingStart,
             EndDateTime = existingEnd,
             Status = BookingStatus.Cancelled,
@@ -185,8 +185,8 @@ public class BookingServiceTests
 
         var newRequest = new CreateBookingRequest
         {
-            ResourceId = 1,
-            UserId = 1,
+            ResourceId = "resource-1",
+            UserId = "user-1",
             StartDateTime = existingStart,
             EndDateTime = existingEnd
         };
@@ -204,14 +204,14 @@ public class BookingServiceTests
     {
         // Arrange
         using var context = GetInMemoryDbContext();
-        await SeedUserAndResourceAsync(context, userId: 1, resourceId: 1);
+        await SeedUserAndResourceAsync(context, userId: "user-1", resourceId: "resource-1");
 
         var baseTime = DateTime.UtcNow.AddDays(1);
 
         context.Bookings.AddRange(
-            new Booking { ResourceId = 1, UserId = 1, StartDateTime = baseTime.AddHours(1), EndDateTime = baseTime.AddHours(2), Status = BookingStatus.Active, CreatedAt = DateTime.UtcNow },
-            new Booking { ResourceId = 1, UserId = 1, StartDateTime = baseTime.AddHours(3), EndDateTime = baseTime.AddHours(4), Status = BookingStatus.Active, CreatedAt = DateTime.UtcNow },
-            new Booking { ResourceId = 1, UserId = 1, StartDateTime = baseTime.AddHours(5), EndDateTime = baseTime.AddHours(6), Status = BookingStatus.Active, CreatedAt = DateTime.UtcNow }
+            new Booking { ResourceId = "resource-1", UserId = "user-1", StartDateTime = baseTime.AddHours(1), EndDateTime = baseTime.AddHours(2), Status = BookingStatus.Active, CreatedAt = DateTime.UtcNow },
+            new Booking { ResourceId = "resource-1", UserId = "user-1", StartDateTime = baseTime.AddHours(3), EndDateTime = baseTime.AddHours(4), Status = BookingStatus.Active, CreatedAt = DateTime.UtcNow },
+            new Booking { ResourceId = "resource-1", UserId = "user-1", StartDateTime = baseTime.AddHours(5), EndDateTime = baseTime.AddHours(6), Status = BookingStatus.Active, CreatedAt = DateTime.UtcNow }
         );
         await context.SaveChangesAsync();
 
@@ -219,7 +219,7 @@ public class BookingServiceTests
 
         // Act - Retrieve with page 1, pageSize 2, sorted by StartDateTime asc
         var bookings = (await service.GetBookingsAsync(
-            resourceId: 1,
+            resourceId: "resource-1",
             from: baseTime,
             to: baseTime.AddHours(10),
             page: 1,
@@ -237,12 +237,12 @@ public class BookingServiceTests
     {
         // Arrange
         using var context = GetInMemoryDbContext();
-        await SeedUserAndResourceAsync(context, userId: 1, resourceId: 1);
+        await SeedUserAndResourceAsync(context, userId: "user-1", resourceId: "resource-1");
 
         var booking = new Booking
         {
-            ResourceId = 1,
-            UserId = 1,
+            ResourceId = "resource-1",
+            UserId = "user-1",
             StartDateTime = DateTime.UtcNow.AddHours(1),
             EndDateTime = DateTime.UtcNow.AddHours(2),
             Status = BookingStatus.Active,

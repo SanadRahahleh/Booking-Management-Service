@@ -1,15 +1,13 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace BookingManagementService.DTOs;
 
 public class CreateBookingRequest
 {
     [Required]
-    [Range(1, int.MaxValue)]
-    public int ResourceId { get; set; }
+    public string ResourceId { get; set; } = string.Empty;
     [Required]
-    [Range(1, int.MaxValue)]
-    public int UserId { get; set; }
+    public string UserId { get; set; } = string.Empty;
     
     public DateTime StartDateTime { get; set; }
     
