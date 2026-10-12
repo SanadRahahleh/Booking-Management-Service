@@ -18,22 +18,40 @@ public class AppDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // User -> Booking
-        modelBuilder.Entity<Booking>()
-            .HasOne(b => b.User)
-            .WithMany(u => u.Bookings)
-            .HasForeignKey(b => b.UserId)
-            .OnDelete(DeleteBehavior.Restrict);
+        // User constraints
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.Property(u => u.Id).HasMaxLength(50);
+            entity.Property(u => u.Name).IsRequired().HasMaxLength(100);
+            entity.Property(u => u.Email).IsRequired().HasMaxLength(150);
+        });
 
-        // Resource -> Booking
-        modelBuilder.Entity<Booking>()
-            .HasOne(b => b.Resource)
-            .WithMany(r => r.Bookings)
-            .HasForeignKey(b => b.ResourceId)
-            .OnDelete(DeleteBehavior.Restrict);
+        // Resource constraints
+        modelBuilder.Entity<Resource>(entity =>
+        {
+            entity.Property(r => r.Id).HasMaxLength(50);
+            entity.Property(r => r.Name).IsRequired().HasMaxLength(100);
+            entity.Property(r => r.Type).IsRequired().HasMaxLength(50);
+        });
 
-        // Index for fast overlap checks and date range filtering
-        modelBuilder.Entity<Booking>()
-            .HasIndex(b => new { b.ResourceId, b.StartDateTime, b.EndDateTime });
+        // Booking constraints & relationships
+        modelBuilder.Entity<Booking>(entity =>
+        {
+            entity.Property(b => b.ResourceId).IsRequired().HasMaxLength(50);
+            entity.Property(b => b.UserId).IsRequired().HasMaxLength(50);
+
+            entity.HasOne(b => b.User)
+                .WithMany(u => u.Bookings)
+                .HasForeignKey(b => b.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(b => b.Resource)
+                .WithMany(r => r.Bookings)
+                .HasForeignKey(b => b.ResourceId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Composite index for overlap checks and date range filtering
+            entity.HasIndex(b => new { b.ResourceId, b.Status, b.StartDateTime, b.EndDateTime });
+        });
     }
 }

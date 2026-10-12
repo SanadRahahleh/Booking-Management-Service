@@ -1,254 +1,317 @@
 # Booking Management Service
 
-A backend service for managing bookings of shared resources such as meeting rooms, desks, and equipment.
+A robust, production-grade backend service built with **.NET 10** for managing bookings of shared resources such as meeting rooms, desks, and equipment.
 
-The system provides RESTful APIs for managing users, resources, and bookings, with built-in validation and protection against double bookings.
-
----
-
-## Tech Stack
-
-- .NET 10 Web API
-- ASP.NET Core
-- Entity Framework Core 10
-- SQL Server / LocalDB
-- xUnit
-- Entity Framework Core InMemory
-- HTML5
-- CSS3
-- JavaScript (ES6)
-- REST API
-- 3-Tier Layered Architecture
+The system provides RESTful APIs for managing users, resources, and bookings, featuring strict boundary validation, soft cancellation, high-efficiency indexing, and rigorous concurrency protection against double bookings.
 
 ---
 
-## Architecture
+## 🚀 Tech Stack
 
-The project follows a 3-Tier Layered Architecture:
+- **Framework**: .NET 10 Web API (ASP.NET Core 10)
+- **Data Access & ORM**: Entity Framework Core 10
+- **Database**: Microsoft SQL Server / LocalDB
+- **Testing**: xUnit, EF Core InMemory (Unit Tests), SQL Server LocalDB with `Task.WhenAll` (Relational Concurrency Tests)
+- **Frontend Dashboard**: HTML5, CSS3, Vanilla JavaScript (ES6) with XSS sanitization
+- **API Documentation**: Microsoft OpenAPI / Swagger
+- **Architecture**: 3-Tier Layered Architecture (Controllers ➔ Services ➔ Data Layer)
+
+---
+
+## 🏗️ Architecture & Clean Design
+
+The project strictly adheres to a **3-Tier Layered Architecture** with clean separation of concerns and Dependency Injection:
 
 ```text
-Controller
-    ↓
-Service Interface
-    ↓
-Service
-    ↓
-Data Access
-    ↓
-SQL Server
+HTTP Clients (Frontend / Swagger / cURL)
+                     │
+                     ▼
+             Controllers Layer
+       (HTTP Status Codes, Routing, Location Headers)
+                     │
+                     ▼
+             Service Interfaces
+      (IBookingService, IResourceService, IUserService)
+                     │
+                     ▼
+          Application Services Layer
+     (Business Rules, Overlap Checks, Bounded Deadlock Retry)
+                     │
+                     ▼
+            Data Layer (EF Core)
+        (AppDbContext, Indexes, Migrations)
+                     │
+                     ▼
+               SQL Server
 ```
 
-### Components
+### Key Components
 
-- **Controllers**: Handle HTTP requests and responses and communicate with application services.
-- **Interfaces**: Define contracts for application services (`IBookingService`, `IResourceService`, `IUserService`).
-- **Services**: Contain application business logic and booking rules (`BookingService`, `ResourceService`, `UserService`).
-- **Data**: Contains Entity Framework Core `AppDbContext` for database communication.
+- **Controllers**: Thin controllers responsible only for HTTP protocol concerns, route resolution (`CreatedAtAction` with valid `Location` headers), request validation, and status code dispatching.
+- **Interfaces**: Clear abstraction boundaries allowing mockability and decoupled testing.
+- **Services**: Pure business logic containing booking rules, time validation, slot collision algorithms, and transient concurrency retry.
+- **Middleware**: `GlobalExceptionHandlingMiddleware` guarantees centralized, consistent JSON error responses across all endpoints without leaking internal stack traces.
+- **Data**: `AppDbContext` configuring relational foreign keys (`DeleteBehavior.Restrict`), string length boundaries, and composite indexes.
 
 ---
 
-## Main Features
+## 📅 Booking Invariants & Overlap Logic
 
-### 1. User Management
-- Create users
-- Retrieve users
+A resource cannot have two active bookings that collide in time.
 
-### 2. Resource Management
-- Create shared resources (e.g., Meeting Rooms, Desks, Equipment)
-- Retrieve resources
+### Mathematical Definition of Overlap
 
-### 3. Booking Management
-- Create bookings
-- Retrieve bookings with date range filtering, pagination, and sorting
-- Cancel bookings (soft cancellation)
-- Prevent overlapping active bookings
+Booking intervals are treated as **half-open intervals** $[Start, End)$.
 
----
-
-## Booking Rules & Concurrency
-
-A resource cannot have two active bookings that overlap in time.
-
-### Overlapping Booking Example (Rejected):
-```text
-10:00 ───────── 12:00
-       Booking 1
-
-11:00 ───────── 13:00
-       Booking 2  (Rejected - Overlaps with Booking 1)
-```
-
-### Back-to-Back Booking Example (Allowed):
-```text
-10:00 ───── 11:00
-       Booking 1
-
-11:00 ───── 12:00
-       Booking 2  (Allowed - Half-open boundary)
-```
-
-> **Cancelled Bookings**: Cancelled bookings do not prevent a resource from being booked again.
-
----
-
-## Concurrency Protection (Extension Task — Option 1)
-
-The booking creation process uses a database transaction with `Serializable` isolation to protect the overlap check from concurrent requests:
+A new booking candidate $[S_{new}, E_{new})$ collides with an existing active booking $[S_{old}, E_{old})$ if and only if:
+$$\text{Start}_{new} < \text{End}_{old} \quad \land \quad \text{End}_{new} > \text{Start}_{old}$$
 
 ```text
-Begin Transaction (Serializable)
-       ↓
-Check for overlapping active booking
-       ↓
-Create booking (Status = Active)
-       ↓
-Save Changes
-       ↓
-Commit Transaction
+Overlapping Booking Example (REJECTED — 409 Conflict):
+10:00 ────────────── 12:00  [Existing Active Booking]
+       11:00 ────────────── 13:00  [New Request -> REJECTED]
+
+Back-to-Back Booking Example (ALLOWED — 201 Created):
+10:00 ─────── 11:00  [Existing Booking]
+              11:00 ─────── 12:00  [New Request -> ALLOWED: 11:00 < 11:00 is False]
+```
+
+### Core Business Rules
+1. **Time Order**: `StartDateTime < EndDateTime` is strictly enforced.
+2. **Entity Existence**: Both `ResourceId` and `UserId` must exist in the database.
+3. **Cancelled Bookings**: Cancelled bookings (`Status = Cancelled`) do not block availability. Slots become available immediately upon cancellation.
+4. **Independent Resources**: Multiple resources can be booked for the exact same time slot without collision.
+5. **Auditing**: All timestamps (`CreatedAt`, `StartDateTime`, `EndDateTime`) are tracked in UTC.
+6. **Soft Cancellation**: Bookings are never physically deleted (`DELETE /api/Bookings/{id}` updates status to `Cancelled`), preserving historical audit trails. Repeated cancellation is idempotent.
+
+---
+
+## ⚡ Concurrency & Deadlock Resiliency
+
+### The Concurrency Challenge
+When multiple concurrent requests attempt to book the same resource for an overlapping time slot in a millisecond window, application-level `AnyAsync()` checks in default `ReadCommitted` isolation are prone to **phantom reads** and race conditions where both requests see the slot as open and both insert duplicate bookings.
+
+### Serializable Isolation & SQL Server Behavior
+To guarantee absolute correctness, `BookingService.CreateBookingAsync` executes inside a database transaction with `IsolationLevel.Serializable`.
+
+In SQL Server, `Serializable` transactions acquire Range Key locks (`RangeS-S`). When two concurrent transactions read the same range simultaneously and subsequently attempt to insert, SQL Server detects lock contention and selects one transaction as a **deadlock victim** (`SqlException` Error 1205).
+
+### Bounded Retry Strategy
+Rather than blindly misclassifying transient database deadlocks as domain booking conflicts, `BookingService` implements a **bounded retry mechanism** (up to 3 attempts with exponential jitter backoff):
+1. **Attempt 1**: Two concurrent requests execute. One transaction commits successfully. The other encounters a transient lock contention / deadlock.
+2. **Transient Detection**: `IsDeadlockException` inspects the entire exception hierarchy. If Error 1205 is detected, the transaction rolls back, clears EF Core's change tracker, and waits briefly.
+3. **Retry**: The retrying transaction re-executes. Because Transaction 1 committed, the business overlap query (`AnyAsync(...)`) detects the now-committed booking and raises a clean `BookingConflictException`.
+4. **Domain Conflict Mapping**: The middleware translates `BookingConflictException` into an accurate `409 Conflict` HTTP response.
+5. **Exhausted Deadlocks**: If contention cannot be resolved after all retries, a `ConcurrencyException` is thrown and mapped to `503 Service Unavailable`, guaranteeing system stability.
+
+---
+
+## 📡 REST API Endpoints
+
+### 1. Users (`/api/Users`)
+
+| Method | Endpoint | Description | Status Code |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/Users` | Retrieve all registered users | `200 OK` |
+| `GET` | `/api/Users/{id}` | Retrieve single user by ID | `200 OK` / `404 Not Found` |
+| `POST` | `/api/Users` | Create a new user | `201 Created` (with `Location` header) |
+
+**Sample POST `/api/Users` Request:**
+```json
+{
+  "name": "Sanad Rahahleh",
+  "email": "sanad@example.com"
+}
 ```
 
 ---
 
-## 📑 Design Write-up (Assignment Q&A)
+### 2. Resources (`/api/Resources`)
 
-### A. How did you define and enforce overlapping bookings, and why?
-- **Definition**: Booking $[S_{new}, E_{new})$ overlaps active booking $[S_{old}, E_{old})$ if:
-  $$\text{Start}_{new} < \text{End}_{old} \quad \land \quad \text{End}_{new} > \text{Start}_{old}$$
-- **Boundaries**: Back-to-back bookings (e.g. 10–11 and 11–12) do not collide because intervals are half-open $[Start, End)$.
-- **Enforcement**: Checked inside `BookingService.CreateBookingAsync` within a `Serializable` transaction to prevent race conditions.
+| Method | Endpoint | Description | Status Code |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/Resources` | Retrieve all shared resources | `200 OK` |
+| `GET` | `/api/Resources/{id}` | Retrieve single resource by ID | `200 OK` / `404 Not Found` |
+| `POST` | `/api/Resources` | Create a new shared resource | `201 Created` (with `Location` header) |
 
-### B. What did you assume about concurrency?
-- We assumed multiple users can attempt to book the same resource for overlapping time slots at the exact same millisecond. Application-level `AnyAsync()` checks alone are insufficient due to read-after-read phantom condition races.
-
-### C. What would break in your design at scale, and where would the first bottleneck be?
-- **First Bottleneck**: **Database Transaction Locking**.
-  `IsolationLevel.Serializable` locks rows/tables during evaluation. Under high write throughput for popular resources, requests will queue up waiting for locks, leading to connection timeouts or `409 Conflict` spikes.
-
-### D. How would you evolve this into a distributed system?
-1. **Redis Distributed Lock (Redlock)**: Lock at the resource level (`lock:resource:{id}`) in Redis before database operations.
-2. **CQRS**: Separate write DB from read replicas for queries.
-3. **Event Broker**: Publish `BookingCreated` events to RabbitMQ/Kafka for async notification/billing services.
-
-### E. Which tradeoff did you prioritize — simplicity, correctness, or performance — and why?
-- **Priority**: **Correctness**. Double-booking in a shared resource environment is a critical business failure. Absolute consistency was prioritized over write speed.
+**Sample POST `/api/Resources` Request:**
+```json
+{
+  "id": "room-101",
+  "name": "Executive Boardroom",
+  "type": "Meeting Room"
+}
+```
 
 ---
 
-## API Endpoints
+### 3. Bookings (`/api/Bookings`)
 
-### Users
-- **GET /api/Users**: Retrieve all registered users.
-- **POST /api/Users**: Create a user.
+| Method | Endpoint | Description | Status Code |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/Bookings` | Create a new booking | `201 Created` / `400 Bad Request` / `404 Not Found` / `409 Conflict` |
+| `GET` | `/api/Bookings/{id}` | Retrieve single booking by ID | `200 OK` / `404 Not Found` |
+| `GET` | `/api/Bookings` | Filter bookings by resource, date range, pagination, and sorting | `200 OK` / `400 Bad Request` |
+| `DELETE` | `/api/Bookings/{id}` | Soft-cancel booking (status set to `Cancelled`) | `204 No Content` / `404 Not Found` |
+
+**Sample POST `/api/Bookings` Request:**
+```json
+{
+  "resourceId": "room-101",
+  "userId": "user-guid-here",
+  "startDateTime": "2026-10-15T09:00:00Z",
+  "endDateTime": "2026-10-15T11:00:00Z"
+}
+```
+
+**Query Parameters for `GET /api/Bookings`:**
+- `resourceId` (string, required): ID of resource to filter.
+- `from` (ISO DateTime, required): Start of query boundary.
+- `to` (ISO DateTime, required): End of query boundary (`from < to`).
+- `page` (int, optional, default: 1): Page number.
+- `pageSize` (int, optional, default: 10, max: 100): Page size.
+- `sortBy` (string, optional, default: `StartDateTime`): Sort field (`StartDateTime`, `EndDateTime`, `CreatedAt`, `Id`).
+- `sortOrder` (string, optional, default: `asc`): Sort direction (`asc` or `desc`).
+
+---
+
+## 🛡️ Validation & Exception Handling
+
+### DTO Validations
+All input DTOs utilize Data Annotations to enforce data integrity before reaching services:
+- `Name`: Required, trimmed, length 1–100 characters.
+- `Email`: Required, valid email format, length up to 150 characters.
+- `Type`: Required, length 1–50 characters.
+- `ResourceId` & `UserId`: Required, non-empty, length up to 50 characters.
+- Pagination bounds: `page >= 1`, `pageSize` between 1 and 100.
+
+### Global Exception Mapping
+The application middleware intercepts all exceptions and transforms them into standard JSON payloads:
+
+| Exception Type | HTTP Status | Response Payload |
+| :--- | :--- | :--- |
+| `ArgumentException` | `400 Bad Request` | `{"message": "<Validation details>"}` |
+| `KeyNotFoundException` | `404 Not Found` | `{"message": "<Entity not found>"}` |
+| `BookingConflictException` | `409 Conflict` | `{"message": "The resource is already booked during this time."}` |
+| `ConcurrencyException` | `503 Service Unavailable` | `{"message": "Database is currently busy under high concurrent contention..."}` |
+| Unhandled / System Exceptions | `500 Internal Server Error` | `{"message": "An unexpected error occurred. Please try again later."}` |
+
+---
+
+## 💾 Database Schema & Lifecycle
+
+### Schema Design
+- **`Users`**: `Id (nvarchar(50), PK)`, `Name (nvarchar(100))`, `Email (nvarchar(150))`.
+- **`Resources`**: `Id (nvarchar(50), PK)`, `Name (nvarchar(100))`, `Type (nvarchar(50))`.
+- **`Bookings`**: `Id (int, PK Identity)`, `ResourceId (nvarchar(50), FK)`, `UserId (nvarchar(50), FK)`, `StartDateTime (datetime2)`, `EndDateTime (datetime2)`, `Status (int)`, `CreatedAt (datetime2)`.
+- **Optimized Composite Indexes**:
+  - `IX_Bookings_ResourceId_Status_StartDateTime_EndDateTime` on `(ResourceId, Status, StartDateTime, EndDateTime)`: Enables direct index-seek operations for slot collision and range queries.
+  - Foreign key constraints configured with `DeleteBehavior.Restrict`.
+
+### Safe Database Lifecycle
+- Destructive operations (`EnsureDeleted()`) have been eliminated.
+- **Development**: Pending migrations are applied safely on startup via `context.Database.MigrateAsync()` without modifying existing data.
+- **Production**: Automatic schema mutations are disabled; migrations are managed through standard CI/CD deployment pipelines or `dotnet ef database update`.
+
+---
+
+## ⚙️ Configuration & Secrets
+
+Connection strings are kept strictly separate from production code:
+- **`appsettings.Development.json`**: Points to local development SQL Server LocalDB instance:
   ```json
   {
-    "name": "Sanad Rahahleh",
-    "email": "sanad@example.com"
+    "ConnectionStrings": {
+      "DefaultConnection": "Server=(localdb)\\MSSQLLocalDB;Database=BookingManagementDb;Trusted_Connection=True;TrustServerCertificate=True;"
+    }
   }
   ```
-
-### Resources
-- **GET /api/Resources**: Retrieve all shared resources.
-- **POST /api/Resources**: Create a resource.
-  ```json
-  {
-    "name": "Meeting Room A",
-    "type": "Room"
-  }
+- **`appsettings.json`**: Contains an empty placeholder for production.
+- **`appsettings.example.json`**: Provides reference configurations for LocalDB, Docker containers, and dedicated SQL Server instances.
+- **Production Environment Variables**: In production, configure the database connection string using:
+  ```bash
+  ConnectionStrings__DefaultConnection="Server=your-sql-server;Database=BookingDb;User Id=user;Password=secret;TrustServerCertificate=True;"
   ```
-
-### Bookings
-- **POST /api/Bookings**: Create a booking.
-  ```json
-  {
-    "resourceId": 1,
-    "userId": 1,
-    "startDateTime": "2026-09-10T10:00:00Z",
-    "endDateTime": "2026-09-10T12:00:00Z"
-  }
-  ```
-- **GET /api/Bookings**: Retrieve bookings with filtering, pagination, and sorting.
-  - Query params: `resourceId`, `from`, `to`, `page`, `pageSize`, `sortBy`, `sortOrder`.
-  - Example: `GET /api/Bookings?resourceId=1&from=2026-09-01T00:00:00Z&to=2026-09-30T23:59:59Z&page=1&pageSize=10`
-- **DELETE /api/Bookings/{id}**: Soft-cancel a booking (changes status to `Cancelled`).
+- Startup validates the presence of `DefaultConnection` and provides an explicit diagnostic message if missing.
 
 ---
 
-## Testing
+## 🔒 Security Measures
 
-The project includes unit tests using **xUnit** and **EF Core InMemory Database**:
+1. **CORS Hardening**:
+   - In Development: Allows local origins for rapid frontend testing.
+   - In Production: Rejects arbitrary origins and restricts traffic to origins explicitly defined under `Cors:AllowedOrigins`.
+2. **XSS Protection**:
+   - The frontend dashboard uses `escapeHtml()` to sanitize all text inputs (`u.name`, `r.name`, `b.id`) before rendering into the DOM.
+3. **Information Disclosure Prevention**:
+   - Internal stack traces and server internals are intercepted by middleware and never exposed to API consumers in 500 error responses.
+4. **SQL Injection Immunity**:
+   - All database communication utilizes Entity Framework Core parameterized SQL queries.
+
+---
+
+## 🧪 Testing Suite & Verification
+
+The solution includes a full test suite with **19 automated tests** covering unit scenarios and relational integration concurrency:
 
 ```bash
 dotnet test
 ```
 
-### Covered Test Scenarios:
-- Booking validation (`StartDateTime < EndDateTime`)
-- Overlapping booking prevention
-- Back-to-back bookings
-- Ignored cancelled bookings
-- Soft cancellation behavior
-- Pagination & Sorting logic
+### Test Coverage Highlights
+- **18 Unit Tests (`BookingServiceTests.cs`)**:
+  - Valid booking creation & response structure.
+  - Invalid time order (`start >= end`).
+  - Blank and whitespace identifier validation.
+  - Missing resource & missing user handling (404).
+  - Slot overlap rejection (`BookingConflictException`).
+  - Back-to-back booking allowance ($[Start, End)$ boundary).
+  - Independent simultaneous bookings across distinct resources.
+  - Slot reuse following soft cancellation.
+  - Single booking lookup by ID.
+  - Query pagination, sorting, and boundary validation.
+  - Idempotent soft cancellation.
+- **1 Relational Concurrency Integration Test (`BookingConcurrencyTests.cs`)**:
+  - Executes directly against **SQL Server LocalDB** using `Task.WhenAll`.
+  - Fires two concurrent requests for the exact same resource and overlapping time range.
+  - Verifies that exactly 1 request succeeds and 1 fails with `BookingConflictException`.
+  - Verifies that the database contains exactly one active booking record.
 
 ---
 
-## Getting Started
+## 🚦 Getting Started
 
-### 1. Prerequisites
-- .NET 10 SDK
-- SQL Server or LocalDB
-- IDE (Visual Studio / VS Code)
+### Prerequisites
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- SQL Server (or SQL Server LocalDB / Docker container)
 
-### 2. Run Application
+### 1. Clone & Restore
 ```bash
-# Navigate to API project
-cd "OOKING MANAGEMENT SERVICE"
+git clone https://github.com/SanadRahahleh/Booking-Management-Service.git
+cd Booking-Management-Service
+dotnet restore
+```
 
-# Run API
+### 2. Update Database Schema
+```bash
+dotnet ef database update --project "OOKING MANAGEMENT SERVICE" --startup-project "OOKING MANAGEMENT SERVICE"
+```
+
+### 3. Run Application
+```bash
+cd "OOKING MANAGEMENT SERVICE"
 dotnet run
 ```
-API available at `http://localhost:5084` and `https://localhost:7098`.
+API endpoints are served at `http://localhost:5084` and `https://localhost:7098`.
+OpenAPI documentation is available in development mode at `/openapi/v1.json`.
 
-### 3. Run Frontend Dashboard
-Open [`frontend/index.html`](frontend/index.html) in a web browser while the backend API is running.
+### 4. Run Frontend Dashboard
+Open [`frontend/index.html`](frontend/index.html) in your browser. The frontend automatically connects to the backend with automatic HTTPS/HTTP fallback.
 
 ---
 
-## Project Structure
+## 🔮 Scalability Trade-offs & Future Improvements
 
-```text
-Booking-Management-Service
-│
-├── OOKING MANAGEMENT SERVICE
-│   ├── Controllers
-│   │   ├── UsersController.cs
-│   │   ├── ResourcesController.cs
-│   │   └── BookingsController.cs
-│   ├── Data
-│   │   └── AppDbContext.cs
-│   ├── DTOs
-│   ├── Interfaces
-│   │   ├── IBookingService.cs
-│   │   ├── IResourceService.cs
-│   │   └── IUserService.cs
-│   ├── Migrations
-│   ├── Models
-│   │   ├── User.cs
-│   │   ├── Resource.cs
-│   │   └── Booking.cs
-│   ├── Services
-│   │   ├── BookingService.cs
-│   │   ├── ResourceService.cs
-│   │   └── UserService.cs
-│   ├── appsettings.json
-│   └── Program.cs
-│
-├── BookingManagementService.Tests
-│   ├── BookingServiceTests.cs
-│   └── BookingManagementService.Tests.csproj
-│
-└── frontend
-    ├── index.html
-    ├── style.css
-    └── app.js
-```
-This project was developed as a backend engineering project to demonstrate REST API development, layered architecture, database design, business logic, testing, and concurrency handling.
+- **Database Locking vs Distributed Locks**: `Serializable` transactions guarantee absolute correctness for single-node SQL Server instances. In high-throughput distributed systems, resource-level distributed locking (e.g. via **Redis Redlock**) or optimistic concurrency tokens can alleviate database lock contention.
+- **CQRS & Read Replicas**: Separate query models from write models to scale booking search queries across read replicas.
+- **Authentication & Authorization**: Currently excluded by design to focus on core backend architecture, concurrency, and validation. In a multi-tenant production system, integrating ASP.NET Core Identity with JWT Bearer tokens and Role-Based Access Control (RBAC) would be the next step.

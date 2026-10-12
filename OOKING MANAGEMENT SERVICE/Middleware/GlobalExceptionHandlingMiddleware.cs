@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using BookingManagementService.Exceptions;
 
 namespace BookingManagementService.Middleware;
 
@@ -35,9 +36,10 @@ public class GlobalExceptionHandlingMiddleware
 
         var (statusCode, message) = exception switch
         {
-            ArgumentException argEx => ((int)HttpStatusCode.BadRequest, argEx.Message),
+            BookingConflictException conflictEx => ((int)HttpStatusCode.Conflict, conflictEx.Message),
             KeyNotFoundException keyEx => ((int)HttpStatusCode.NotFound, keyEx.Message),
-            InvalidOperationException invEx => ((int)HttpStatusCode.Conflict, invEx.Message),
+            ArgumentException argEx => ((int)HttpStatusCode.BadRequest, argEx.Message),
+            ConcurrencyException => ((int)HttpStatusCode.ServiceUnavailable, "Database is currently busy under high concurrent contention. Please retry your request."),
             _ => ((int)HttpStatusCode.InternalServerError, "An unexpected error occurred. Please try again later.")
         };
 

@@ -17,7 +17,19 @@ namespace BookingManagementService.Services
 
         public async Task<List<Resource>> GetAllAsync()
         {
-            return await _context.Resources.ToListAsync();
+            return await _context.Resources.AsNoTracking().ToListAsync();
+        }
+
+        public async Task<Resource?> GetByIdAsync(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return null;
+            }
+
+            return await _context.Resources
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == id.Trim());
         }
 
         public async Task<Resource> CreateAsync(CreateResourceRequest request)

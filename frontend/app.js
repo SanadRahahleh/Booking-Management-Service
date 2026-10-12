@@ -8,6 +8,17 @@ function formatLocalISO(date) {
     return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
 }
 
+// XSS Sanitizer Helper
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Display Banner Alerts and scroll smoothly to top
 function showAlert(message, isSuccess = true) {
     const alert = document.getElementById('alertBanner');
@@ -54,9 +65,9 @@ async function loadUsers() {
             }
             listEl.innerHTML = users.map(u => `
                 <tr>
-                    <td><strong>${u.id}</strong></td>
-                    <td>${u.name}</td>
-                    <td>${u.email}</td>
+                    <td><strong>${escapeHtml(u.id)}</strong></td>
+                    <td>${escapeHtml(u.name)}</td>
+                    <td>${escapeHtml(u.email)}</td>
                 </tr>
             `).join('');
         } else {
@@ -81,14 +92,14 @@ document.getElementById('createUserForm').addEventListener('submit', async (e) =
         const data = await response.json();
 
         if (response.ok) {
-            showAlert(` User "${data.name}" created successfully with ID: ${data.id}`, true);
+            showAlert(`User "${data.name}" created successfully with ID: ${data.id}`, true);
             document.getElementById('createUserForm').reset();
             loadUsers();
         } else {
-            showAlert(` Failed to create user (${response.status}): ${data.message || 'Error occurred'}`, false);
+            showAlert(`Failed to create user (${response.status}): ${data.message || 'Error occurred'}`, false);
         }
     } catch (err) {
-        showAlert(' Network Error: Make sure ASP.NET Core API is running.', false);
+        showAlert('Network Error: Make sure ASP.NET Core API is running.', false);
     }
 });
 
@@ -107,9 +118,9 @@ async function loadResources() {
             }
             listEl.innerHTML = resources.map(r => `
                 <tr>
-                    <td><strong>${r.id}</strong></td>
-                    <td>${r.name}</td>
-                    <td>${r.type}</td>
+                    <td><strong>${escapeHtml(r.id)}</strong></td>
+                    <td>${escapeHtml(r.name)}</td>
+                    <td>${escapeHtml(r.type)}</td>
                 </tr>
             `).join('');
         } else {
@@ -134,14 +145,14 @@ document.getElementById('createResourceForm').addEventListener('submit', async (
         const data = await response.json();
 
         if (response.ok) {
-            showAlert(` Resource "${data.name}" created successfully with ID: ${data.id}`, true);
+            showAlert(`Resource "${data.name}" created successfully with ID: ${data.id}`, true);
             document.getElementById('createResourceForm').reset();
             loadResources();
         } else {
-            showAlert(` Failed to create resource (${response.status}): ${data.message || 'Error occurred'}`, false);
+            showAlert(`Failed to create resource (${response.status}): ${data.message || 'Error occurred'}`, false);
         }
     } catch (err) {
-        showAlert(' Network Error: Make sure ASP.NET Core API is running.', false);
+        showAlert('Network Error: Make sure ASP.NET Core API is running.', false);
     }
 });
 
@@ -167,17 +178,15 @@ document.getElementById('createBookingForm').addEventListener('submit', async (e
         const data = await response.json();
 
         if (response.ok) {
-            showAlert(` Booking #${data.id} created successfully! (Status: ${data.status})`, true);
-            // If filter form has search active, refresh list
+            showAlert(`Booking #${data.id} created successfully! (Status: ${data.status})`, true);
             document.getElementById('filterBookingsForm').dispatchEvent(new Event('submit'));
         } else if (response.status === 409) {
-            // Handle 409 Conflict as specified in prompt
-            showAlert(` Resource is already booked during this time.`, false);
+            showAlert(`Resource is already booked during this time.`, false);
         } else {
-            showAlert(` Booking Error (${response.status}): ${data.message || 'Failed to create booking'}`, false);
+            showAlert(`Booking Error (${response.status}): ${data.message || 'Failed to create booking'}`, false);
         }
     } catch (err) {
-        showAlert(' Network Error: Make sure ASP.NET Core API is running.', false);
+        showAlert('Network Error: Make sure ASP.NET Core API is running.', false);
     }
 });
 
@@ -187,13 +196,21 @@ document.getElementById('createBookingForm').addEventListener('submit', async (e
 document.getElementById('filterBookingsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const resourceId = document.getElementById('filterResourceId').value.trim();
-    const from = new Date(document.getElementById('filterFrom').value).toISOString();
-    const to = new Date(document.getElementById('filterTo').value).toISOString();
+    const fromVal = document.getElementById('filterFrom').value;
+    const toVal = document.getElementById('filterTo').value;
+
+    if (!resourceId) {
+        showAlert('Please provide a Resource ID to filter bookings.', false);
+        return;
+    }
+
+    const from = new Date(fromVal).toISOString();
+    const to = new Date(toVal).toISOString();
 
     const listEl = document.getElementById('bookingsList');
 
     try {
-        const response = await apiFetch(`/Bookings?resourceId=${resourceId}&from=${from}&to=${to}`);
+        const response = await apiFetch(`/Bookings?resourceId=${encodeURIComponent(resourceId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
         const bookings = await response.json();
 
         if (response.ok) {
@@ -208,15 +225,16 @@ document.getElementById('filterBookingsForm').addEventListener('submit', async (
                     ? '<span class="badge badge-cancelled">Cancelled</span>'
                     : '<span class="badge badge-active">Active</span>';
 
+                const sanitizedId = parseInt(b.id, 10);
                 const actionButton = !isCancelled
-                    ? `<button class="btn btn-danger" onclick="cancelBooking(${b.id})">Cancel</button>`
+                    ? `<button class="btn btn-danger" onclick="cancelBooking(${sanitizedId})">Cancel</button>`
                     : '—';
 
                 return `
                     <tr>
-                        <td><strong>#${b.id}</strong></td>
-                        <td>${b.resourceId}</td>
-                        <td>${b.userId}</td>
+                        <td><strong>#${sanitizedId}</strong></td>
+                        <td>${escapeHtml(b.resourceId)}</td>
+                        <td>${escapeHtml(b.userId)}</td>
                         <td>${new Date(b.startDateTime).toLocaleString()}</td>
                         <td>${new Date(b.endDateTime).toLocaleString()}</td>
                         <td>${statusBadge}</td>
@@ -226,7 +244,7 @@ document.getElementById('filterBookingsForm').addEventListener('submit', async (
                 `;
             }).join('');
         } else {
-            listEl.innerHTML = `<tr><td colspan="8" class="text-muted">Error (${response.status}): ${bookings.message || 'Failed to fetch bookings'}</td></tr>`;
+            listEl.innerHTML = `<tr><td colspan="8" class="text-muted">Error (${response.status}): ${escapeHtml(bookings.message || 'Failed to fetch bookings')}</td></tr>`;
         }
     } catch (err) {
         listEl.innerHTML = '<tr><td colspan="8" class="text-muted">Cannot connect to API backend.</td></tr>';
@@ -235,26 +253,27 @@ document.getElementById('filterBookingsForm').addEventListener('submit', async (
 
 // Cancel Booking
 async function cancelBooking(id) {
-    if (!confirm(`Are you sure you want to cancel booking #${id}?`)) return;
+    const sanitizedId = parseInt(id, 10);
+    if (isNaN(sanitizedId)) return;
+
+    if (!confirm(`Are you sure you want to cancel booking #${sanitizedId}?`)) return;
 
     try {
-        const response = await apiFetch(`/Bookings/${id}`, { method: 'DELETE' });
+        const response = await apiFetch(`/Bookings/${sanitizedId}`, { method: 'DELETE' });
 
-        // Scroll to top immediately
         window.scrollTo({ top: 0, behavior: 'smooth' });
 
         if (response.ok) {
             showAlert("Booking cancelled successfully.", true);
-            // Refresh bookings list
             document.getElementById('filterBookingsForm').dispatchEvent(new Event('submit'));
         } else {
             let errorMsg = 'Failed to cancel booking.';
             try { const data = await response.json(); errorMsg = data.message || errorMsg; } catch (_) {}
-            showAlert(`❌ Error (${response.status}): ${errorMsg}`, false);
+            showAlert(`Error (${response.status}): ${errorMsg}`, false);
         }
     } catch (err) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        showAlert(' Network Error: Could not cancel booking.', false);
+        showAlert('Network Error: Could not cancel booking.', false);
     }
 }
 
@@ -271,7 +290,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('filterFrom').value = formatLocalISO(now);
     document.getElementById('filterTo').value = formatLocalISO(nextWeek);
 
-    // Initial load of users and resources lists
     loadUsers();
     loadResources();
 });

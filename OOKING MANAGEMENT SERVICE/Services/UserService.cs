@@ -17,7 +17,19 @@ namespace BookingManagementService.Services
 
         public async Task<List<User>> GetAllAsync()
         {
-            return await _context.Users.ToListAsync();
+            return await _context.Users.AsNoTracking().ToListAsync();
+        }
+
+        public async Task<User?> GetByIdAsync(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return null;
+            }
+
+            return await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == id.Trim());
         }
 
         public async Task<User> CreateAsync(CreateUserRequest request)
@@ -25,8 +37,8 @@ namespace BookingManagementService.Services
             var user = new User
             {
                 Id = Guid.NewGuid().ToString(),
-                Name = request.Name,
-                Email = request.Email
+                Name = request.Name.Trim(),
+                Email = request.Email.Trim().ToLowerInvariant()
             };
 
             _context.Users.Add(user);

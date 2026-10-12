@@ -16,14 +16,27 @@ public class BookingsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<BookingResponse>> CreateBooking(CreateBookingRequest request)
+    public async Task<ActionResult<BookingResponse>> CreateBooking([FromBody] CreateBookingRequest request)
     {
         var booking = await _bookingService.CreateBookingAsync(request);
 
         return CreatedAtAction(
-            nameof(GetBookings),
+            nameof(GetBookingById),
             new { id = booking.Id },
             booking);
+    }
+
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<BookingResponse>> GetBookingById(int id)
+    {
+        var booking = await _bookingService.GetBookingByIdAsync(id);
+
+        if (booking == null)
+        {
+            return NotFound(new { message = $"Booking with ID {id} was not found." });
+        }
+
+        return Ok(booking);
     }
 
     [HttpGet]
@@ -36,13 +49,28 @@ public class BookingsController : ControllerBase
         [FromQuery] string? sortBy = "StartDateTime",
         [FromQuery] string? sortOrder = "asc")
     {
+        if (string.IsNullOrWhiteSpace(resourceId))
+        {
+            return BadRequest(new { message = "ResourceId query parameter is required." });
+        }
+
         if (from >= to)
         {
-            throw new ArgumentException("From date must be before To date.");
+            return BadRequest(new { message = "From date must be before To date." });
+        }
+
+        if (page < 1)
+        {
+            return BadRequest(new { message = "Page number must be 1 or greater." });
+        }
+
+        if (pageSize < 1 || pageSize > 100)
+        {
+            return BadRequest(new { message = "PageSize must be between 1 and 100." });
         }
 
         var bookings = await _bookingService.GetBookingsAsync(
-            resourceId,
+            resourceId.Trim(),
             from,
             to,
             page,
@@ -60,7 +88,7 @@ public class BookingsController : ControllerBase
 
         if (!cancelled)
         {
-            return NotFound(new { message = "Booking not found." });
+            return NotFound(new { message = $"Booking with ID {id} was not found." });
         }
 
         return NoContent();

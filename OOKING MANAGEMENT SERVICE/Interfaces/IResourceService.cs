@@ -7,6 +7,8 @@ namespace OOKING_MANAGEMENT_SERVICE.Interface
     {
         Task<List<Resource>> GetAllAsync();
 
+        Task<Resource?> GetByIdAsync(string id);
+
         Task<Resource> CreateAsync(CreateResourceRequest request);
     }
 }

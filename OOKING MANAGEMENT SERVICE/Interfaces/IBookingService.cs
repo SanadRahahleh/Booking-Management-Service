@@ -15,5 +15,7 @@ public interface IBookingService
         string? sortBy = "StartDateTime",
         string? sortOrder = "asc");
 
+    Task<BookingResponse?> GetBookingByIdAsync(int id);
+
     Task<bool> CancelBookingAsync(int id);
 }

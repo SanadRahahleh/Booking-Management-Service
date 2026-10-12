@@ -1,5 +1,6 @@
 using BookingManagementService.Data;
 using BookingManagementService.DTOs;
+using BookingManagementService.Exceptions;
 using BookingManagementService.Models;
 using Microsoft.EntityFrameworkCore;
 using OOKING_MANAGEMENT_SERVICE.Interface;
@@ -16,108 +17,162 @@ public class BookingService : IBookingService
         _context = context;
     }
 
-    public async Task<BookingResponse> CreateBookingAsync(
-        CreateBookingRequest request)
+    public async Task<BookingResponse> CreateBookingAsync(CreateBookingRequest request)
     {
+        var resourceId = request.ResourceId?.Trim() ?? string.Empty;
+        var userId = request.UserId?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(resourceId) || string.IsNullOrWhiteSpace(userId))
+        {
+            throw new ArgumentException("ResourceId and UserId are required.");
+        }
+
         // 1. Validate time range
         if (request.StartDateTime >= request.EndDateTime)
         {
-            throw new ArgumentException(
-                "Start time must be before end time.");
+            throw new ArgumentException("Start time must be before end time.");
         }
 
         // 2. Check that Resource exists
         var resourceExists = await _context.Resources
-            .AnyAsync(r => r.Id == request.ResourceId);
+            .AnyAsync(r => r.Id == resourceId);
 
         if (!resourceExists)
         {
-            throw new KeyNotFoundException(
-                "Resource not found.");
+            throw new KeyNotFoundException("Resource not found.");
         }
 
         // 3. Check that User exists
         var userExists = await _context.Users
-            .AnyAsync(u => u.Id == request.UserId);
+            .AnyAsync(u => u.Id == userId);
 
         if (!userExists)
         {
-            throw new KeyNotFoundException(
-                "User not found.");
+            throw new KeyNotFoundException("User not found.");
         }
 
-        // Start transaction if using relational database
-        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction = null;
-        if (_context.Database.IsRelational())
+        const int maxRetries = 3;
+        for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
-            transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
-        }
-
-        try
-        {
-            // 4. Check for overlapping active bookings
-            var hasOverlap = await _context.Bookings
-                .AnyAsync(b =>
-                    b.ResourceId == request.ResourceId &&
-                    b.Status == BookingStatus.Active &&
-                    request.StartDateTime < b.EndDateTime &&
-                    request.EndDateTime > b.StartDateTime);
-
-            if (hasOverlap)
+            Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction = null;
+            if (_context.Database.IsRelational())
             {
-                throw new InvalidOperationException(
-                    "The resource is already booked during this time.");
+                transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
             }
 
-            // 5. Create booking
-            var booking = new Booking
+            try
             {
-                ResourceId = request.ResourceId,
-                UserId = request.UserId,
-                StartDateTime = request.StartDateTime,
-                EndDateTime = request.EndDateTime,
-                Status = BookingStatus.Active,
-                CreatedAt = DateTime.UtcNow
-            };
+                // 4. Check for overlapping active bookings
+                var hasOverlap = await _context.Bookings
+                    .AnyAsync(b =>
+                        b.ResourceId == resourceId &&
+                        b.Status == BookingStatus.Active &&
+                        request.StartDateTime < b.EndDateTime &&
+                        request.EndDateTime > b.StartDateTime);
 
-            // 6. Save
-            _context.Bookings.Add(booking);
+                if (hasOverlap)
+                {
+                    throw new BookingConflictException("The resource is already booked during this time.");
+                }
 
-            await _context.SaveChangesAsync();
+                // 5. Create booking
+                var booking = new Booking
+                {
+                    ResourceId = resourceId,
+                    UserId = userId,
+                    StartDateTime = request.StartDateTime,
+                    EndDateTime = request.EndDateTime,
+                    Status = BookingStatus.Active,
+                    CreatedAt = DateTime.UtcNow
+                };
 
-            // Commit transaction if active
-            if (transaction != null)
-            {
-                await transaction.CommitAsync();
+                // 6. Save
+                _context.Bookings.Add(booking);
+                await _context.SaveChangesAsync();
+
+                if (transaction != null)
+                {
+                    await transaction.CommitAsync();
+                }
+
+                // 7. Return response
+                return new BookingResponse
+                {
+                    Id = booking.Id,
+                    ResourceId = booking.ResourceId,
+                    UserId = booking.UserId,
+                    StartDateTime = booking.StartDateTime,
+                    EndDateTime = booking.EndDateTime,
+                    Status = booking.Status.ToString(),
+                    CreatedAt = booking.CreatedAt
+                };
             }
-
-            // 7. Return response
-            return new BookingResponse
+            catch (BookingConflictException)
             {
-                Id = booking.Id,
-                ResourceId = booking.ResourceId,
-                UserId = booking.UserId,
-                StartDateTime = booking.StartDateTime,
-                EndDateTime = booking.EndDateTime,
-                Status = booking.Status.ToString(),
-                CreatedAt = booking.CreatedAt
-            };
+                if (transaction != null)
+                {
+                    await transaction.RollbackAsync();
+                }
+                throw;
+            }
+            catch (Exception ex) when (IsDeadlockException(ex))
+            {
+                if (transaction != null)
+                {
+                    try { await transaction.RollbackAsync(); } catch { /* ignore rollback on deadlocked connection */ }
+                }
+
+                _context.ChangeTracker.Clear();
+
+                if (attempt < maxRetries)
+                {
+                    await Task.Delay(50 * attempt + Random.Shared.Next(10, 40));
+                    continue;
+                }
+
+                throw new ConcurrencyException("The operation encountered transient database contention and could not complete.", ex);
+            }
+            catch
+            {
+                if (transaction != null)
+                {
+                    await transaction.RollbackAsync();
+                }
+                throw;
+            }
+            finally
+            {
+                if (transaction != null)
+                {
+                    await transaction.DisposeAsync();
+                }
+            }
         }
-        catch
+
+        throw new ConcurrencyException("Unexpected failure during booking creation.");
+    }
+
+    public async Task<BookingResponse?> GetBookingByIdAsync(int id)
+    {
+        var b = await _context.Bookings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        if (b == null)
         {
-            if (transaction != null)
-            {
-                await transaction.RollbackAsync();
-            }
-            throw;
+            return null;
         }
-        finally
+
+        return new BookingResponse
         {
-            if (transaction != null)
-            {
-                await transaction.DisposeAsync();
-            }
-        }
+            Id = b.Id,
+            ResourceId = b.ResourceId,
+            UserId = b.UserId,
+            StartDateTime = b.StartDateTime,
+            EndDateTime = b.EndDateTime,
+            Status = b.Status.ToString(),
+            CreatedAt = b.CreatedAt
+        };
     }
 
     public async Task<IEnumerable<BookingResponse>> GetBookingsAsync(
@@ -133,10 +188,12 @@ public class BookingService : IBookingService
         pageSize = pageSize < 1 ? 10 : pageSize;
         pageSize = pageSize > 100 ? 100 : pageSize;
 
+        var cleanResourceId = resourceId?.Trim() ?? string.Empty;
+
         var query = _context.Bookings
             .AsNoTracking()
             .Where(b =>
-                b.ResourceId == resourceId &&
+                b.ResourceId == cleanResourceId &&
                 b.StartDateTime < to &&
                 b.EndDateTime > from);
 
@@ -177,9 +234,26 @@ public class BookingService : IBookingService
         }
 
         booking.Status = BookingStatus.Cancelled;
-
         await _context.SaveChangesAsync();
 
         return true;
+    }
+
+    private static bool IsDeadlockException(Exception? ex)
+    {
+        while (ex != null)
+        {
+            if (ex is Microsoft.Data.SqlClient.SqlException sqlEx && sqlEx.Number == 1205)
+            {
+                return true;
+            }
+            if (ex.Message.Contains("1205", StringComparison.OrdinalIgnoreCase) ||
+                ex.Message.Contains("deadlock", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            ex = ex.InnerException;
+        }
+        return false;
     }
 }
