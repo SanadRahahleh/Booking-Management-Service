@@ -30,11 +30,11 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload frontend
+      - name: Upload frontend as site root
         uses: actions/upload-pages-artifact@v3
         with:
-          path: frontend
+          path: ./frontend
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy site
         id: deployment
         uses: actions/deploy-pages@v4
